@@ -7,6 +7,8 @@
 #include <queue>
 using namespace std;
 
+stringstream ss;
+
 struct IFStruct { //  Instruction fetch from memory
     string instruction; // Full instruction. e.g. "lw $2, 8($0)"
     bitset<32> PC;
@@ -15,19 +17,19 @@ struct IFStruct { //  Instruction fetch from memory
 
 struct IDStruct { // Instruction decode & register read
     string Op; // Split instruction. e.g. "lw", "sw", "add", "sub", "beq
-    bitset<5> Rs;
-    bitset<5> Rt;
-    bitset<5> Rd;
-    bitset<16> Immediate;
+    int Rs;
+    int Rt;
+    int Rd;
+    int Immediate;
     bool nop = false;
 };
 
 struct EXStruct { //Execute operation or calculate address
     string Instruction;
-    bitset<5> Rs;
-    bitset<5> Rt;
-    bitset<5> Rd;
-    bitset<16> Immediate;
+    int Rd;
+    int Rs;
+    int Rt;
+    int Immediate;
     bitset<32> ALUResult;
     bitset<32> ReadData1;
     bitset<32> ReadData2;
@@ -54,8 +56,8 @@ struct MEMStruct { // Access memory operand
 
 struct WBStruct { // Write result back to register
     string Instruction;
-    bitset<5> Rs;
-    bitset<5> Rt;
+    int Rs;
+    int Rt;
     bool RegDst = false; // Used in WB
     bool RegWrite = false; // Used in WB
     bool MemtoReg = false; // Used in WB
@@ -70,7 +72,7 @@ private:
     MEMStruct MEM;
     WBStruct WB;
     int registers[32] = {0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1};
-    int memory[32] = {1};
+    int memory[32] = {1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1};
     queue<string> instructions;
 public:
     void excuteIF() {
@@ -79,24 +81,64 @@ public:
     }
 
     void excuteID() {
-        stringstream ss(IF.instruction);
+        ss << IF.instruction;
         ss >> ID.Op; // stringstream split string by space in default.
         if(ID.Op == "lw") {
-            ss >> ID.Rs;
+            string regPart, memoryPart;
+            ss >> regPart;
             ss.ignore();
-            ss >> ID.Rt;
+            ss >> memoryPart;
+
+            ID.Rt = stoi(regPart.substr(1));
+            ID.Rs = stoi(memoryPart.substr(memoryPart.find('$') + 1, memoryPart.find(')') - memoryPart.find('(') - 2));
+            ID.Immediate = stoi(memoryPart.substr(0, memoryPart.find('(')));
         } else if(ID.Op == "sw") {
-            
+            string regPart, memoryPart;
+            ss >> regPart;
+            ss.ignore();
+            ss >> memoryPart;
+
+            ID.Rt = stoi(memoryPart.substr(memoryPart.find('$') + 1, memoryPart.find(')') - memoryPart.find('(') - 2));
+            ID.Rs = stoi(regPart.substr(1));
+            ID.Immediate = stoi(memoryPart.substr(0, memoryPart.find('(')));
         } else if(ID.Op == "add") {
-
+            string rd, rs, rt;
+            ss >> rd;
+            ss.ignore();
+            ss >> rs;
+            ss.ignore();
+            ss >> rt;
+            
+            ID.Rd = stoi(rd.substr(1));
+            ID.Rs = stoi(rs.substr(1));
+            ID.Rt = stoi(rt.substr(1));
         } else if(ID.Op == "sub") {
-
+            string rd, rs, rt;
+            ss >> rd;
+            ss.ignore();
+            ss >> rs;
+            ss.ignore();
+            ss >> rt;
+            
+            ID.Rd = stoi(rd.substr(1));
+            ID.Rs = stoi(rs.substr(1));
+            ID.Rt = stoi(rt.substr(1));
         } else if(ID.Op == "beq") {
-
+            string rs, rt, offset;
+            ss >> rs;
+            ss.ignore();
+            ss >> rt;
+            ss.ignore();
+            ss >> offset;
+            
+            ID.Rs = stoi(rs.substr(1));
+            ID.Rt = stoi(rt.substr(1));
+            ID.Immediate = stoi(offset);
         } else {
             throw "Unknown instruction!";
         }
-        cout << "123";
+        ss.str("");
+        ss.clear();
     }
 
     void excuteEX() {
