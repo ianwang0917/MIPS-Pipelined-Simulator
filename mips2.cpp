@@ -52,6 +52,7 @@ struct MEMStruct { // Access memory operand
     bool RegWrite = false;
     bool MemtoReg = false;
     bool nop = false;
+    bool Branch = false;
 };
 
 struct WBStruct { // Write result back to register
@@ -74,6 +75,8 @@ private:
     int registers[32] = {0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1};
     int memory[32] = {1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1};
     queue<string> instructions;
+    int cycle = 0; 
+
 public:
     void excuteIF() {
         IF.instruction = instructions.front();
@@ -142,7 +145,7 @@ public:
     }
 
     void excuteEX() {
-
+       
     }
 
     void excuteMEM() {
@@ -159,20 +162,42 @@ public:
         excuteEX();
         excuteMEM();
         excuteWB();
+        printState();
     }
 
     void printState() {
-
+        cout << "Clock Cycle " << cycle << ":\n";
+        if (!IF.nop) {
+            cout << IF.instruction.substr(0, 3) << " IF\n";
+        }
+        if (!ID.nop) {
+            cout << ID.Op << " ID\n";
+        }
+        if (!EX.nop) {
+            cout << EX.Instruction.substr(0, 3) << " EX ";
+            cout << "RegDst=" << EX.RegDst << " ALUSrc=" << EX.ALUSrc << " Branch=" << EX.Branch;
+            cout << " MemRead=" << EX.MemRead << " MemWrite=" << EX.MemWrite << " RegWrite=" << EX.RegWrite;
+            cout << " MemToReg=" << EX.MemtoReg << "\n";
+        }
+        if (!MEM.nop) {
+            cout << MEM.Instruction.substr(0, 3) << " MEM ";
+            cout << "Branch=" << MEM.Branch << " MemRead=" << MEM.MemRead << " MemWrite=" << MEM.MemWrite;
+            cout << " RegWrite=" << MEM.RegWrite << " MemToReg=" << MEM.MemtoReg << "\n";
+        }
+        if (!WB.nop) {
+            cout << WB.Instruction.substr(0, 3) << " WB ";
+            cout << "RegWrite=" << WB.RegWrite << " MemToReg=" << WB.MemtoReg << "\n";
+        }
     }
 
     void readInstructions() {
         fstream file;
-        file.open("inputs/test1.txt");
-        if(!file){
+        file.open("inputs/test6.txt");
+        if (!file) {
             throw "Can't open file";
         }
         string instruction;
-        while(getline(file, instruction)){
+        while (getline(file, instruction)) {
             instructions.push(instruction);
         }
         file.close();
@@ -180,7 +205,23 @@ public:
 
     void run() {
         readInstructions();
-        excute();
+        while (!instructions.empty()) {
+            cycle++;
+            excute();
+        }
+        cout << "Total Cycles: " << cycle << endl;
+
+        cout << "Final Register Values:" << endl;
+        for (int i = 0; i < 32; i++) {
+            cout << registers[i] << " ";
+        }
+        cout << endl;
+
+        cout << "Final Memory Values:" << endl;
+        for (int i = 0; i < 32; i++) {
+            cout << memory[i] << " ";
+        }
+        cout << endl;
     }
 };
 
