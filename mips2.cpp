@@ -1,4 +1,6 @@
 #include <iostream>
+#include <fstream>
+#include <string>
 #include <bitset>
 #include <vector>
 using namespace std;
@@ -92,10 +94,22 @@ public:
 
 };
 
-int main(void) {
-    vector<string> instructions = {
-        "lw $2, 8($0)"
-    };
+vector<string> instructions = {
+    "lw $2, 8($0)"
+};
 
-    
+void readInstruction() {
+    fstream file;
+    file.open("inputs/test3.txt");
+    if(!file) {
+        throw "Can't open file";
+    }
+    string instruction;
+    while(getline(file, instruction)) {
+        instructions.push_back(instruction);
+    }
+}
+
+int main(void) {
+    //readInstruction();
 }
