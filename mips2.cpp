@@ -46,6 +46,7 @@ struct MEMStruct { // Access memory operand
     int Rs = 0;
     int Rt = 0;
     int ALUResult;
+    int temp;
     bool MemRead = false; // Used in MEM
     bool MemWrite = false; // Used in MEM
     bool RegDst = false;
@@ -72,14 +73,14 @@ private:
     EXStruct EX;
     MEMStruct MEM;
     WBStruct WB;
-    int registers[32] = {0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1};
-    int memory[32] = {1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1};
+    int registers[32] = { 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1 };
+    int memory[32] = { 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1 };
     queue<string> instructions;
-    int cycle = 1; 
+    int cycle = 1;
 
 public:
     void excuteIF() {
-        if(!instructions.empty()) {
+        if (!instructions.empty()) {
             IF.Instruction = instructions.front();
             instructions.pop();
         }
@@ -88,7 +89,7 @@ public:
     void excuteID() {
         ss << IF.Instruction;
         ss >> ID.Op; // stringstream split string by space in default.
-        if(ID.Op == "lw") {
+        if (ID.Op == "lw") {
             string regPart, memoryPart;
             ss >> regPart;
             ss.ignore();
@@ -97,7 +98,8 @@ public:
             ID.Rt = stoi(regPart.substr(1));
             ID.Rs = stoi(memoryPart.substr(memoryPart.find('$') + 1, memoryPart.find(')') - memoryPart.find('(') - 2));
             ID.Immediate = stoi(memoryPart.substr(0, memoryPart.find('(')));
-        } else if(ID.Op == "sw") {
+        }
+        else if (ID.Op == "sw") {
             string regPart, memoryPart;
             ss >> regPart;
             ss.ignore();
@@ -106,41 +108,46 @@ public:
             ID.Rt = stoi(memoryPart.substr(memoryPart.find('$') + 1, memoryPart.find(')') - memoryPart.find('(') - 2));
             ID.Rs = stoi(regPart.substr(1));
             ID.Immediate = stoi(memoryPart.substr(0, memoryPart.find('(')));
-        } else if(ID.Op == "add") {
+        }
+        else if (ID.Op == "add") {
             string rd, rs, rt;
             ss >> rd;
             ss.ignore();
             ss >> rs;
             ss.ignore();
             ss >> rt;
-            
+
             ID.Rd = stoi(rd.substr(1));
             ID.Rs = stoi(rs.substr(1));
             ID.Rt = stoi(rt.substr(1));
-        } else if(ID.Op == "sub") {
+        }
+        else if (ID.Op == "sub") {
             string rd, rs, rt;
             ss >> rd;
             ss.ignore();
             ss >> rs;
             ss.ignore();
             ss >> rt;
-            
+
             ID.Rd = stoi(rd.substr(1));
             ID.Rs = stoi(rs.substr(1));
             ID.Rt = stoi(rt.substr(1));
-        } else if(ID.Op == "beq") {
+        }
+        else if (ID.Op == "beq") {
             string rs, rt, offset;
             ss >> rs;
             ss.ignore();
             ss >> rt;
             ss.ignore();
             ss >> offset;
-            
+
             ID.Rs = stoi(rs.substr(1));
             ID.Rt = stoi(rt.substr(1));
             ID.Immediate = stoi(offset);
-        } else if (ID.Op == "") {   
-        } else {
+        }
+        else if (ID.Op == "") {
+        }
+        else {
             throw "Unknown instruction!";
         }
         ss.str("");
@@ -150,41 +157,53 @@ public:
 
     void excuteEX() {
         EX.Op = ID.Op;
-        if(EX.Op == "lw") {
+        if (EX.Op == "lw") {
             EX.Rs = ID.Rs;
             EX.Rt = ID.Rt;
             EX.Immediate = ID.Immediate;
             EX.RegDst = 0; EX.ALUSrc = 1, EX.MemtoReg = 1, EX.RegWrite = 1, EX.MemRead = 1, EX.MemWrite = 0, EX.Branch = 0;
-        } else if(EX.Op == "sw") {
+
+            EX.ALUResult = EX.Rs + EX.Immediate / 4;
+        }
+        else if (EX.Op == "sw") {
             EX.Rs = ID.Rs;
             EX.Rt = ID.Rt;
             EX.Immediate = ID.Immediate;
             // Actually,RegDst and MemtoReg are don't care.
-            EX.RegDst = 0; EX.ALUSrc = 1, EX.MemtoReg = 0, EX.RegWrite = 0, EX.MemRead = 0, EX.MemWrite = 1, EX.Branch = 0; 
-        } else if(EX.Op == "add" || EX.Op == "sub") {
+            EX.RegDst = 0; EX.ALUSrc = 1, EX.MemtoReg = 0, EX.RegWrite = 0, EX.MemRead = 0, EX.MemWrite = 1, EX.Branch = 0;
+
+            EX.ALUResult = EX.Rt + EX.Immediate / 4;
+        }
+        else if (EX.Op == "add" || EX.Op == "sub") {
             EX.Rd = ID.Rd;
             EX.Rs = ID.Rs;
             EX.Rt = ID.Rt;
             EX.RegDst = 1; EX.ALUSrc = 0, EX.MemtoReg = 0, EX.RegWrite = 1, EX.MemRead = 0, EX.MemWrite = 0, EX.Branch = 0;
-            if(EX.Op == "add") {
-                memory[EX.Rd] = memory[EX.Rs] + memory[EX.Rt];
-            } else if(EX.Op == "sub") {
-                memory[EX.Rd] = memory[EX.Rs] - memory[EX.Rt];
+            if (EX.Op == "add") {
+                registers[EX.Rd] = registers[EX.Rs] + registers[EX.Rt];
             }
-        } else if(EX.Op == "beq") {
+            else if (EX.Op == "sub") {
+                registers[EX.Rd] = registers[EX.Rs] - registers[EX.Rt];
+            }
+        }
+        else if (EX.Op == "beq") {
             EX.Rd = ID.Rd;
             EX.Rs = ID.Rs;
             EX.Immediate = ID.Immediate;
             // Actually,RegDst and MemtoReg are don't care.
             // Branch should check in ID.
-            EX.RegDst = 0; EX.ALUSrc = 1, EX.MemtoReg = 0, EX.RegWrite = 0, EX.MemRead = 0, EX.MemWrite = 1, EX.Branch = 0; 
+            EX.RegDst = 0; EX.ALUSrc = 1, EX.MemtoReg = 0, EX.RegWrite = 0, EX.MemRead = 0, EX.MemWrite = 1, EX.Branch = 0;
         }
         resetID();
     }
 
     void excuteMEM() {
+        if (EX.nop == true) {               //if stall exists
+            MEM.nop = true;
+        }
+
         MEM.Op = EX.Op;
-        MEM.Rs = MEM.Rt;
+        MEM.Rs = EX.Rs;
         MEM.Rt = EX.Rt;
         MEM.ALUResult = EX.ALUResult;
         MEM.RegDst = EX.RegDst;
@@ -192,6 +211,16 @@ public:
         MEM.RegWrite = EX.RegWrite;
         MEM.MemRead = EX.MemRead;
         MEM.MemWrite = EX.MemWrite;
+
+        if (MEM.Op == "lw") {
+            MEM.temp = memory[MEM.ALUResult];
+        }
+        else if (MEM.Op == "sw") {
+            memory[MEM.ALUResult] = registers[MEM.Rs];
+        }
+        else if (MEM.Op == "beq") {
+
+        }
         resetEX();
     }
 
@@ -202,6 +231,10 @@ public:
         WB.RegDst = MEM.RegDst;
         WB.RegWrite = MEM.RegWrite;
         WB.MemtoReg = MEM.MemtoReg;
+
+        if (WB.Op == "lw") {
+            registers[WB.Rt] = MEM.temp;
+        }
         resetMEM();
     }
 
@@ -268,7 +301,7 @@ public:
 
     void readInstructions() {
         fstream file;
-        file.open("inputs/test1.txt");
+        file.open("inputs/test3.txt");
         if (!file) {
             throw "Can't open file";
         }
@@ -283,7 +316,7 @@ public:
         readInstructions();
         while (true) {
             excute();
-            if(IF.Instruction == "" && ID.Op == "" && EX.Op == "" && MEM.Op == "" && WB.Op == "") {
+            if (IF.Instruction == "" && ID.Op == "" && EX.Op == "" && MEM.Op == "" && WB.Op == "") {
                 break;
             }
             cycle++;
