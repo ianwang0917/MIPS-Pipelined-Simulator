@@ -350,22 +350,6 @@ public:
         cout << "\n";
     }
 
-    void printFinal() {
-        cout << "\n##Final Result:\nTotal Cycles: " << cycle << "\n";
-
-        cout << "Final Register Values:\n";
-        for (int i = 0; i < 32; i++) {
-            cout << registers[i] << " ";
-        }
-        cout << "\n";
-
-        cout << "Final Memory Values:\n";
-        for (int i = 0; i < 32; i++) {
-            cout << memory[i] << " ";
-        }
-        cout << "\n";
-    }
-
     void readInstructions() {
         fstream file;
         file.open("inputs/test1.txt");
