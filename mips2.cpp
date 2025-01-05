@@ -13,6 +13,7 @@ struct IFStruct { //  Instruction fetch from memory
     int PC = 0;
     int Rs = 0; //For load use hazard, implement Rs and Rt for "lw" here.
     int Rt = 0; //For load use hazard, implement Rs and Rt for "lw" here.
+    int Rd = 0; //For load use hazard, implement Rs and Rt for "lw" here.
     bool nop = false;
 };
 
@@ -88,6 +89,7 @@ private:
     bool EXHazard_Rt = false;
     bool MEMHazard_Rs = false;
     bool MEMHazard_Rt = false;
+    bool LoadUseHazard = false;
 
 public:
     void excuteIF() {
@@ -96,13 +98,23 @@ public:
             instructions.pop();
         }
 
+        string reg1, reg2, reg3_or_offset; 
         ss << IF.Instruction;
         ss >> IF.Op;
 
         if (IF.Op == "lw" || IF.Op == "sw") {
-            
+            ss >> reg1 >> reg2;
+            IF.Rt = stoi(reg1.substr(1));
+            IF.Rs = stoi(reg2.substr(reg2.find('$') + 1, reg2.find(')') - reg2.find('(') - 2));
+        } else if (IF.Op == "add" || IF.Op == "sub") {
+            ss >> reg1 >> reg2 >> reg3_or_offset;
+            IF.Rd = stoi(reg1.substr(1));
+            IF.Rs = stoi(reg2.substr(1));
+            IF.Rt = stoi(reg3_or_offset.substr(1));
         } else if (IF.Op == "beq") {
-            
+            ss >> reg1 >> reg2 >> reg3_or_offset;
+            IF.Rs = stoi(reg1.substr(1));
+            IF.Rt = stoi(reg2.substr(1));
         }
 
         ss.str("");
@@ -168,7 +180,6 @@ public:
             EX.Rs = ID.Rs;
             EX.Rt = ID.Rt;
             EX.Immediate = ID.Immediate;
-
             EX.RegDst = 0; EX.ALUSrc = 1, EX.MemtoReg = 1, EX.RegWrite = 1, EX.MemRead = 1, EX.MemWrite = 0, EX.Branch = 0;
             EX.ALUResult = EX.Rs + EX.Immediate/4;
         } else if (EX.Op == "sw") {
@@ -264,11 +275,15 @@ public:
             /* if (EX/MEM.RegWrite and (EX/MEM.RegisterRd ≠ 0)
             and (EX/MEM.RegisterRd = ID/EX.RegisterRs)) ForwardA = 10 */
             EXHazard_Rs = true;
+        } else {
+            EXHazard_Rs = false;
         }
         if (EX.RegWrite == true && EX.Rd != 0 && EX.Rd == ID.Rt) {
             /* if (EX/MEM.RegWrite and (EX/MEM.RegisterRd ≠ 0)
             and (EX/MEM.RegisterRd = ID/EX.RegisterRt)) ForwardB = 10 */
             EXHazard_Rt = true;
+        } else {
+            EXHazard_Rt = false;
         }
     }
 
@@ -279,23 +294,33 @@ public:
             and (EX/MEM.RegisterRd = ID/EX.RegisterRs))
             and (MEM/WB.RegisterRd = ID/EX.RegisterRs)) ForwardA = 01 */
             MEMHazard_Rs = true;
+        } else {
+            MEMHazard_Rs = false;
         }
+
         if (MEM.RegWrite == true && MEM.Rd != 0 && MEM.Rd == ID.Rt && !EXHazard_Rt) {
             /*if (MEM/WB.RegWrite and (MEM/WB.RegisterRd ≠ 0)
             and not (EX/MEM.RegWrite and (EX/MEM.RegisterRd ≠ 0)
             and (EX/MEM.RegisterRd = ID/EX.RegisterRt))
             and (MEM/WB.RegisterRd = ID/EX.RegisterRt)) ForwardB = 01*/
             MEMHazard_Rt = true;
+        } else {
+            MEMHazard_Rt = false;
         }
     }
 
     void detectLoadUseHazard() { // Should Stall (unavoidable)
-        if (ID.Op == "lw" && (ID.Rt == IF.Rs || ID.Rt == IF.Rt)) { // ID/EX.MemRead
-            
+        if (ID.Op == "lw" && (ID.Rt == IF.Rs || ID.Rt == IF.Rt)) {
+            LoadUseHazard = true;
+        } else {
+            LoadUseHazard = false;
         }
     }
 
     void excute() { // Forward implement, backword pull data.
+        detectEXHazard();
+        detectMEMHazard();
+        detectLoadUseHazard();
         excuteWB();
         excuteMEM();
         excuteEX();
