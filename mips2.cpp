@@ -22,6 +22,7 @@ struct IDStruct { // Instruction decode & register read
     int Rs = 0;
     int Rt = 0;
     int Rd = 0;
+    int ReadData1;
     int Immediate = 0;
     bool nop = false;
 };
@@ -101,8 +102,11 @@ public:
             IF.Instruction = instructions.front();
             instructions.pop();
         }
+        else {
+            IF.Instruction = "";// 無指令時清空
+        }
 
-        string reg1, reg2, reg3_or_offset; 
+        string reg1, reg2, reg3_or_offset;
         ss << IF.Instruction;
         ss >> IF.Op;
 
@@ -110,12 +114,14 @@ public:
             ss >> reg1 >> reg2;
             IF.Rt = stoi(reg1.substr(1));
             IF.Rs = stoi(reg2.substr(reg2.find('$') + 1, reg2.find(')') - reg2.find('(') - 2));
-        } else if (IF.Op == "add" || IF.Op == "sub") {
+        }
+        else if (IF.Op == "add" || IF.Op == "sub") {
             ss >> reg1 >> reg2 >> reg3_or_offset;
             IF.Rd = stoi(reg1.substr(1));
             IF.Rs = stoi(reg2.substr(1));
             IF.Rt = stoi(reg3_or_offset.substr(1));
-        } else if (IF.Op == "beq") {
+        }
+        else if (IF.Op == "beq") {
             ss >> reg1 >> reg2 >> reg3_or_offset;
             IF.Rs = stoi(reg1.substr(1));
             IF.Rt = stoi(reg2.substr(1));
@@ -126,6 +132,11 @@ public:
     }
 
     void excuteID() {
+        if (LoadUseHazard) {
+            ID.nop = true;
+            return; // 插入 nop 停止
+        }
+
         ID.nop = IF.nop;
         if (ID.nop) {
             IF.nop = false;
@@ -142,7 +153,7 @@ public:
             ID.Rt = stoi(regPart.substr(1));
             ID.Rs = stoi(memoryPart.substr(memoryPart.find('$') + 1, memoryPart.find(')') - memoryPart.find('(') - 2));
             ID.Immediate = stoi(memoryPart.substr(0, memoryPart.find('(')));
-        } else if (ID.Op == "sw") {
+        }else if (ID.Op == "sw") {
             string regPart, memoryPart;
             ss >> regPart;
             ss.ignore();
@@ -151,29 +162,29 @@ public:
             ID.Rt = stoi(memoryPart.substr(memoryPart.find('$') + 1, memoryPart.find(')') - memoryPart.find('(') - 2));
             ID.Rs = stoi(regPart.substr(1));
             ID.Immediate = stoi(memoryPart.substr(0, memoryPart.find('(')));
-        } else if (ID.Op == "add") {
+        }else if (ID.Op == "add") {
             string rd, rs, rt;
             ss >> rd >> rs >> rt;
 
             ID.Rd = stoi(rd.substr(1));
             ID.Rs = stoi(rs.substr(1));
             ID.Rt = stoi(rt.substr(1));
-        } else if (ID.Op == "sub") {
+        }else if (ID.Op == "sub") {
             string rd, rs, rt;
             ss >> rd >> rs >> rt;
 
             ID.Rd = stoi(rd.substr(1));
             ID.Rs = stoi(rs.substr(1));
             ID.Rt = stoi(rt.substr(1));
-        } else if (ID.Op == "beq") {
+        }else if (ID.Op == "beq") {
             string rs, rt, offset;
             ss >> rs >> rt >> offset;
 
             ID.Rs = stoi(rs.substr(1));
             ID.Rt = stoi(rt.substr(1));
             ID.Immediate = stoi(offset);
-        } else if (ID.Op == "") {
-        } else {
+        }else if (ID.Op == "") {
+        }else {
             throw "Unknown instruction!";
         }
         ss.str("");
@@ -188,30 +199,64 @@ public:
             return;
         }
         EX.Op = ID.Op;
+
+       
+        // 在 EX 階段處理 forwarding
+        int forwardRsValue = registers[ID.Rs];
+        int forwardRtValue = registers[ID.Rt];
+
+        if (EXHazard_Rs) forwardRsValue = EX.ALUResult;
+        else if (MEMHazard_Rs) forwardRsValue = MEM.ALUResult;
+
+        if (EXHazard_Rt) forwardRtValue = EX.ALUResult;
+        else if (MEMHazard_Rt) forwardRtValue = MEM.ALUResult;
+
+
+        if (EX.RegWrite && EX.Rd != 0 && EX.Rd == ID.Rs) {
+            ID.ReadData1 = EX.ALUResult; // Forward EX 結果給 ID
+        }
+        if (MEM.RegWrite && MEM.Rd != 0 && MEM.Rd == ID.Rs) {
+            ID.ReadData1 = MEM.ReadData; // Forward MEM 結果給 ID
+        }
+
+        if (EX.Op == "beq") {
+            if (forwardRsValue == forwardRtValue) {
+                IF.PC += EX.Immediate; // 更新 PC。
+                resetIF();
+                resetID();
+            }
+        }
+
+
+
         if (EX.Op == "lw") {
             EX.Rs = ID.Rs;
             EX.Rt = ID.Rt;
             EX.Immediate = ID.Immediate;
-            EX.RegDst = 0; EX.ALUSrc = 1, EX.MemtoReg = 1, EX.RegWrite = 1, EX.MemRead = 1, EX.MemWrite = 0, EX.Branch = 0;
-            EX.ALUResult = EX.Rs + EX.Immediate/4;
-        } else if (EX.Op == "sw") {
+            EX.RegDst = 0; EX.ALUSrc = 1; EX.MemtoReg = 1; EX.RegWrite = 1; EX.MemRead = 1; EX.MemWrite = 0; EX.Branch = 0;
+            EX.ALUResult = forwardRsValue + EX.Immediate / 4;
+        }
+        else if (EX.Op == "sw") {
             EX.Rs = ID.Rs;
             EX.Rt = ID.Rt;
             EX.Immediate = ID.Immediate;
-            // Actually,RegDst and MemtoReg are don't care.
-            EX.RegDst = 0; EX.ALUSrc = 1, EX.MemtoReg = 0, EX.RegWrite = 0, EX.MemRead = 0, EX.MemWrite = 1, EX.Branch = 0;
-            EX.ALUResult = EX.Rt + EX.Immediate/4;
-        } else if (EX.Op == "add" || EX.Op == "sub") {
+            EX.RegDst = 0; EX.ALUSrc = 1; EX.MemtoReg = 0; EX.RegWrite = 0; EX.MemRead = 0; EX.MemWrite = 1; EX.Branch = 0;
+            EX.ALUResult = forwardRsValue + EX.Immediate / 4;
+        }
+        else if (EX.Op == "add" || EX.Op == "sub") {
             EX.Rd = ID.Rd;
             EX.Rs = ID.Rs;
             EX.Rt = ID.Rt;
-            EX.RegDst = 1; EX.ALUSrc = 0, EX.MemtoReg = 0, EX.RegWrite = 1, EX.MemRead = 0, EX.MemWrite = 0, EX.Branch = 0;
+            EX.RegDst = 1; EX.ALUSrc = 0; EX.MemtoReg = 0; EX.RegWrite = 1; EX.MemRead = 0; EX.MemWrite = 0; EX.Branch = 0;
+
             if (EX.Op == "add") {
-                EX.ALUResult = registers[EX.Rs] + registers[EX.Rt];
-            } else if (EX.Op == "sub") {
-                EX.ALUResult = registers[EX.Rs] - registers[EX.Rt];
+                EX.ALUResult = forwardRsValue + forwardRtValue;
+            }
+            else if (EX.Op == "sub") {
+                EX.ALUResult = forwardRsValue - forwardRtValue;
             }
         }
+<<<<<<< HEAD
         else if (EX.Op == "beq") {
             EX.Rd = ID.Rd;
             EX.Rs = ID.Rs;
@@ -221,8 +266,11 @@ public:
             EX.RegDst = 0; EX.ALUSrc = 1, EX.MemtoReg = 0, EX.RegWrite = 0, EX.MemRead = 0, EX.MemWrite = 1, EX.Branch = 0;
         }
 
+=======
+>>>>>>> main
         resetID();
     }
+
 
     void excuteMEM() {
         MEM.nop = EX.nop;
@@ -245,10 +293,10 @@ public:
         if (MEM.MemRead) {
             // Load 指令：從記憶體讀取數據
             MEM.ReadData = memory[MEM.ALUResult];
-        } else if (MEM.MemWrite) {
+        }else if (MEM.MemWrite) {
             // Store 指令：將資料寫入記憶體
             memory[MEM.ALUResult] = registers[MEM.Rs];
-        } else{
+        }else {
         }
         resetEX();
     }
@@ -272,8 +320,7 @@ public:
             if (WB.MemtoReg) {
                 // 從記憶體寫回暫存器 (lw 指令)
                 registers[WB.Rt] = MEM.ReadData;
-            }
-            else {
+            }else {
                 // 從 ALU 結果寫回暫存器 (R-type 指令如 add/sub)
                 registers[WB.Rd] = MEM.ALUResult;
             }
@@ -294,14 +341,14 @@ public:
             /* if (EX/MEM.RegWrite and (EX/MEM.RegisterRd ≠ 0)
             and (EX/MEM.RegisterRd = ID/EX.RegisterRs)) ForwardA = 10 */
             EXHazard_Rs = true;
-        } else {
+        }else {
             EXHazard_Rs = false;
         }
         if (EX.RegWrite == true && EX.Rd != 0 && EX.Rd == ID.Rt) {
             /* if (EX/MEM.RegWrite and (EX/MEM.RegisterRd ≠ 0)
             and (EX/MEM.RegisterRd = ID/EX.RegisterRt)) ForwardB = 10 */
             EXHazard_Rt = true;
-        } else {
+        }else {
             EXHazard_Rt = false;
         }
     }
@@ -313,7 +360,7 @@ public:
             and (EX/MEM.RegisterRd = ID/EX.RegisterRs))
             and (MEM/WB.RegisterRd = ID/EX.RegisterRs)) ForwardA = 01 */
             MEMHazard_Rs = true;
-        } else {
+        }else {
             MEMHazard_Rs = false;
         }
 
@@ -323,20 +370,25 @@ public:
             and (EX/MEM.RegisterRd = ID/EX.RegisterRt))
             and (MEM/WB.RegisterRd = ID/EX.RegisterRt)) ForwardB = 01*/
             MEMHazard_Rt = true;
-        } else {
+        }else {
             MEMHazard_Rt = false;
         }
     }
 
     void detectLoadUseHazard() { // Should Stall (unavoidable)
-        if (ID.Op == "lw" && (ID.Rt == IF.Rs || ID.Rt == IF.Rt)) {
+        if (EX.Op == "lw" && (EX.Rt == ID.Rs || EX.Rt == ID.Rt || ID.Op == "beq" || ID.Op == "sw")) {
             LoadUseHazard = true;
+<<<<<<< HEAD
             stallPipeline();
         } else {
+=======
+        }else {
+>>>>>>> main
             LoadUseHazard = false;
         }
     }
 
+<<<<<<< HEAD
     void stallPipeline() {
         IF.nop = true;
     }
@@ -350,6 +402,21 @@ public:
         detectEXHazard();
         detectMEMHazard();
         detectLoadUseHazard();
+=======
+
+    void excute() { // Forward implement, backword pull data.
+        detectLoadUseHazard();
+        detectEXHazard();
+        detectMEMHazard();
+        excuteWB();
+        excuteMEM();
+        excuteEX();
+        if (!LoadUseHazard) { // 如果沒有 Load-Use Hazard 才執行解碼和取指
+            excuteID();
+            excuteIF();
+        }
+        
+>>>>>>> main
     }
 
     void printState() {
@@ -391,7 +458,7 @@ public:
         if (ID.Op != "") {
             cout << ID.Op << " ID\n";
         }
-        if (IF.Instruction != "") {
+        if (IF.Instruction != "" && !IF.nop) {
             string IFInstruction;
             ss << IF.Instruction;
             ss >> IFInstruction;
@@ -402,7 +469,11 @@ public:
     }
 
     void printFinal() {
+<<<<<<< HEAD
         cout << "\n##Final Result:\nTotal Cycles: " << cycle - 1 << "\n";
+=======
+        cout << "\n##Final Result:\nTotal Cycles: " << cycle  - 1 << "\n";
+>>>>>>> main
 
         cout << "Final Register Values:\n";
         for (int i = 0; i < 32; i++) {
@@ -419,7 +490,7 @@ public:
 
     void readInstructions() {
         fstream file;
-        file.open("inputs/test1.txt");
+        file.open("inputs/test6.txt");
         if (!file) {
             throw "Can't open file";
         }
