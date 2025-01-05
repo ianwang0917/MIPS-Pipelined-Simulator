@@ -94,10 +94,6 @@ private:
 
 public:
     void excuteIF() {
-        if (IF.nop) {
-            WB.nop = false;
-            return;
-        }
         if (!instructions.empty()) {
             IF.Instruction = instructions.front();
             instructions.pop();
@@ -138,10 +134,6 @@ public:
         }
 
         ID.nop = IF.nop;
-        if (ID.nop) {
-            IF.nop = false;
-            return;
-        }
         ss << IF.Instruction;
         ss >> ID.Op; // stringstream split string by space in default.
         if (ID.Op == "lw") {
@@ -194,10 +186,6 @@ public:
 
     void excuteEX() {
         EX.nop = ID.nop;
-        if (EX.nop) {
-            ID.nop = false;
-            return;
-        }
         EX.Op = ID.Op;
 
        
@@ -262,10 +250,6 @@ public:
 
     void excuteMEM() {
         MEM.nop = EX.nop;
-        if (MEM.nop) {
-            EX.nop = false;
-            return;
-        }
         MEM.Op = EX.Op;
         MEM.Rs = EX.Rs;
         MEM.Rt = EX.Rt;
@@ -286,15 +270,12 @@ public:
             memory[MEM.ALUResult] = registers[MEM.Rs];
         }else {
         }
+
         resetEX();
     }
 
     void excuteWB() {
         WB.nop = MEM.nop;
-        if (WB.nop) {
-            MEM.nop = false;
-            return;
-        }
         WB.Op = MEM.Op;
         WB.Rs = MEM.Rs;
         WB.Rt = MEM.Rt;
