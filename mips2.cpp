@@ -256,18 +256,6 @@ public:
                 EX.ALUResult = forwardRsValue - forwardRtValue;
             }
         }
-<<<<<<< HEAD
-        else if (EX.Op == "beq") {
-            EX.Rd = ID.Rd;
-            EX.Rs = ID.Rs;
-            EX.Immediate = ID.Immediate;
-            // Actually,RegDst and MemtoReg are don't care.
-            // Branch should check in ID.
-            EX.RegDst = 0; EX.ALUSrc = 1, EX.MemtoReg = 0, EX.RegWrite = 0, EX.MemRead = 0, EX.MemWrite = 1, EX.Branch = 0;
-        }
-
-=======
->>>>>>> main
         resetID();
     }
 
@@ -378,31 +366,11 @@ public:
     void detectLoadUseHazard() { // Should Stall (unavoidable)
         if (EX.Op == "lw" && (EX.Rt == ID.Rs || EX.Rt == ID.Rt || ID.Op == "beq" || ID.Op == "sw")) {
             LoadUseHazard = true;
-<<<<<<< HEAD
-            stallPipeline();
-        } else {
-=======
         }else {
->>>>>>> main
             LoadUseHazard = false;
         }
     }
 
-<<<<<<< HEAD
-    void stallPipeline() {
-        IF.nop = true;
-    }
-
-    void excute() { // Forward implement, backword pull data.
-        excuteWB();
-        excuteMEM();
-        excuteEX();
-        excuteID();
-        excuteIF();
-        detectEXHazard();
-        detectMEMHazard();
-        detectLoadUseHazard();
-=======
 
     void excute() { // Forward implement, backword pull data.
         detectLoadUseHazard();
@@ -416,7 +384,6 @@ public:
             excuteIF();
         }
         
->>>>>>> main
     }
 
     void printState() {
@@ -469,11 +436,7 @@ public:
     }
 
     void printFinal() {
-<<<<<<< HEAD
-        cout << "\n##Final Result:\nTotal Cycles: " << cycle - 1 << "\n";
-=======
         cout << "\n##Final Result:\nTotal Cycles: " << cycle  - 1 << "\n";
->>>>>>> main
 
         cout << "Final Register Values:\n";
         for (int i = 0; i < 32; i++) {
