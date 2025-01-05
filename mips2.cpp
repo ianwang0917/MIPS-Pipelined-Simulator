@@ -373,12 +373,12 @@ public:
             if(EX.Op == "sw" || EX.Op == "beq") {
                 cout << "RegDst=X" << " ALUSrc=" << EX.ALUSrc << " Branch=" << EX.Branch;
                 cout << " MemRead=" << EX.MemRead << " MemWrite=" << EX.MemWrite << " RegWrite=" << EX.RegWrite;
-                cout << " MemToReg=X" << "\n";
+                cout << " MemToReg=X" <<  "\n"  ;
             }
             else {
                 cout << "RegDst=" << EX.RegDst << " ALUSrc=" << EX.ALUSrc << " Branch=" << EX.Branch;
                 cout << " MemRead=" << EX.MemRead << " MemWrite=" << EX.MemWrite << " RegWrite=" << EX.RegWrite;
-                cout << " MemToReg=" << EX.MemtoReg << "\n";
+                cout << " MemToReg=" << EX.MemtoReg <<  "\n"  ;
 
             }
             
