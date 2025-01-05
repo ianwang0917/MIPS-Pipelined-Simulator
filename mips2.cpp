@@ -93,6 +93,10 @@ private:
 
 public:
     void excuteIF() {
+        if (IF.nop) {
+            WB.nop = false;
+            return;
+        }
         if (!instructions.empty()) {
             IF.Instruction = instructions.front();
             instructions.pop();
@@ -123,6 +127,10 @@ public:
 
     void excuteID() {
         ID.nop = IF.nop;
+        if (ID.nop) {
+            IF.nop = false;
+            return;
+        }
         ss << IF.Instruction;
         ss >> ID.Op; // stringstream split string by space in default.
         if (ID.Op == "lw") {
@@ -175,6 +183,10 @@ public:
 
     void excuteEX() {
         EX.nop = ID.nop;
+        if (EX.nop) {
+            ID.nop = false;
+            return;
+        }
         EX.Op = ID.Op;
         if (EX.Op == "lw") {
             EX.Rs = ID.Rs;
@@ -214,6 +226,10 @@ public:
 
     void excuteMEM() {
         MEM.nop = EX.nop;
+        if (MEM.nop) {
+            EX.nop = false;
+            return;
+        }
         MEM.Op = EX.Op;
         MEM.Rs = EX.Rs;
         MEM.Rt = EX.Rt;
@@ -240,6 +256,10 @@ public:
 
     void excuteWB() {
         WB.nop = MEM.nop;
+        if (WB.nop) {
+            MEM.nop = false;
+            return;
+        }
         WB.Op = MEM.Op;
         WB.Rs = MEM.Rs;
         WB.Rt = MEM.Rt;
@@ -312,21 +332,25 @@ public:
     void detectLoadUseHazard() { // Should Stall (unavoidable)
         if (ID.Op == "lw" && (ID.Rt == IF.Rs || ID.Rt == IF.Rt)) {
             LoadUseHazard = true;
+            stallPipeline();
         } else {
             LoadUseHazard = false;
         }
     }
 
+    void stallPipeline() {
+        IF.nop = true;
+    }
+
     void excute() { // Forward implement, backword pull data.
-        detectEXHazard();
-        detectMEMHazard();
-        detectLoadUseHazard();
         excuteWB();
         excuteMEM();
         excuteEX();
         excuteID();
         excuteIF();
-        printState();
+        detectEXHazard();
+        detectMEMHazard();
+        detectLoadUseHazard();
     }
 
     void printState() {
@@ -360,7 +384,7 @@ public:
     }
 
     void printFinal() {
-        cout << "\n##Final Result:\nTotal Cycles: " << cycle << "\n";
+        cout << "\n##Final Result:\nTotal Cycles: " << cycle - 1 << "\n";
 
         cout << "Final Register Values:\n";
         for (int i = 0; i < 32; i++) {
@@ -395,6 +419,7 @@ public:
             if (IF.Instruction == "" && ID.Op == "" && EX.Op == "" && MEM.Op == "" && WB.Op == "") {
                 break;
             }
+            printState();
             cycle++;
         }
         printFinal();
