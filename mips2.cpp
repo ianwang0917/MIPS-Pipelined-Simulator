@@ -45,7 +45,10 @@ struct MEMStruct { // Access memory operand
     string Op;
     int Rs = 0;
     int Rt = 0;
+    int Rd = 0;
     int ALUResult;
+    int ReadData;
+    int Result;
     bool MemRead = false; // Used in MEM
     bool MemWrite = false; // Used in MEM
     bool RegDst = false;
@@ -59,6 +62,7 @@ struct WBStruct { // Write result back to register
     string Op;
     int Rs = 0;
     int Rt = 0;
+    int Rd = 0;
     bool RegDst = false; // Used in WB
     bool RegWrite = false; // Used in WB
     bool MemtoReg = false; // Used in WB
@@ -160,7 +164,9 @@ public:
             EX.Rs = ID.Rs;
             EX.Rt = ID.Rt;
             EX.Immediate = ID.Immediate;
+
             EX.RegDst = 0; EX.ALUSrc = 1, EX.MemtoReg = 1, EX.RegWrite = 1, EX.MemRead = 1, EX.MemWrite = 0, EX.Branch = 0;
+            EX.ALUResult = EX.Rs + EX.Immediate/4;
         }
         else if (EX.Op == "sw") {
             EX.Rs = ID.Rs;
@@ -168,6 +174,7 @@ public:
             EX.Immediate = ID.Immediate;
             // Actually,RegDst and MemtoReg are don't care.
             EX.RegDst = 0; EX.ALUSrc = 1, EX.MemtoReg = 0, EX.RegWrite = 0, EX.MemRead = 0, EX.MemWrite = 1, EX.Branch = 0;
+            EX.ALUResult = EX.Rt + EX.Immediate/4;
         }
         else if (EX.Op == "add" || EX.Op == "sub") {
             EX.Rd = ID.Rd;
@@ -175,10 +182,10 @@ public:
             EX.Rt = ID.Rt;
             EX.RegDst = 1; EX.ALUSrc = 0, EX.MemtoReg = 0, EX.RegWrite = 1, EX.MemRead = 0, EX.MemWrite = 0, EX.Branch = 0;
             if (EX.Op == "add") {
-                memory[EX.Rd] = memory[EX.Rs] + memory[EX.Rt];
+                EX.ALUResult = registers[EX.Rs] + registers[EX.Rt];
             }
             else if (EX.Op == "sub") {
-                memory[EX.Rd] = memory[EX.Rs] - memory[EX.Rt];
+                EX.ALUResult = registers[EX.Rs] - registers[EX.Rt];
             }
         }
         else if (EX.Op == "beq") {
@@ -189,6 +196,7 @@ public:
             // Branch should check in ID.
             EX.RegDst = 0; EX.ALUSrc = 1, EX.MemtoReg = 0, EX.RegWrite = 0, EX.MemRead = 0, EX.MemWrite = 1, EX.Branch = 0;
         }
+ 
         resetID();
     }
 
@@ -196,6 +204,7 @@ public:
         MEM.Op = EX.Op;
         MEM.Rs = EX.Rs;
         MEM.Rt = EX.Rt;
+        MEM.Rd = EX.Rd;
         MEM.ALUResult = EX.ALUResult;
         MEM.RegDst = EX.RegDst;
         MEM.MemtoReg = EX.MemtoReg;
@@ -206,13 +215,14 @@ public:
 
         if (MEM.MemRead) {
             // Load 指令：從記憶體讀取數據
-            MEM.ALUResult = memory[MEM.ALUResult];
+            MEM.ReadData = memory[MEM.ALUResult];
         }
 
-        if (MEM.MemWrite) {
+        else if (MEM.MemWrite) {
             // Store 指令：將資料寫入記憶體
-            memory[MEM.ALUResult] = registers[MEM.Rt];
+            memory[MEM.ALUResult] = registers[MEM.Rs];
         }
+        else{}
 
         resetEX();
     }
@@ -221,28 +231,23 @@ public:
         WB.Op = MEM.Op;
         WB.Rs = MEM.Rs;
         WB.Rt = MEM.Rt;
+        WB.Rd = MEM.Rd;
         WB.RegDst = MEM.RegDst;
         WB.RegWrite = MEM.RegWrite;
         WB.MemtoReg = MEM.MemtoReg;
 
         if (WB.RegWrite) {
-            int writeReg;
-            if (WB.RegDst) {
-                writeReg = EX.Rd; // R-type 指令，目標暫存器是 Rd
-            }
-            else {
-                writeReg = MEM.Rt; // I-type 指令，目標暫存器是 Rt
-            }
-
+          
             if (WB.MemtoReg) {
                 // 從記憶體寫回暫存器 (lw 指令)
-                registers[writeReg] = MEM.ALUResult;
+                registers[WB.Rt] = MEM.ReadData;
             }
             else {
                 // 從 ALU 結果寫回暫存器 (R-type 指令如 add/sub)
-                registers[writeReg] = EX.ALUResult;
+                registers[WB.Rd] = MEM.ALUResult;
             }
         }
+
 
         resetMEM();
     }
@@ -295,7 +300,7 @@ public:
             ss.str("");
             ss.clear();
         }
-      
+
     }
 
     void printFinal() {
