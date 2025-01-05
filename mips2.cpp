@@ -220,7 +220,7 @@ public:
             // Branch should check in ID.
             EX.RegDst = 0; EX.ALUSrc = 1, EX.MemtoReg = 0, EX.RegWrite = 0, EX.MemRead = 0, EX.MemWrite = 1, EX.Branch = 0;
         }
- 
+
         resetID();
     }
 
@@ -250,7 +250,6 @@ public:
             memory[MEM.ALUResult] = registers[MEM.Rs];
         } else{
         }
-
         resetEX();
     }
 
@@ -269,7 +268,7 @@ public:
         WB.MemtoReg = MEM.MemtoReg;
 
         if (WB.RegWrite) {
-          
+
             if (WB.MemtoReg) {
                 // 從記憶體寫回暫存器 (lw 指令)
                 registers[WB.Rt] = MEM.ReadData;
@@ -357,18 +356,37 @@ public:
         cout << "Clock Cycle " << cycle << ":\n";
         if (WB.Op != "") {
             cout << WB.Op << " WB ";
-            cout << "RegWrite=" << WB.RegWrite << " MemToReg=" << WB.MemtoReg << "\n";
+            if (WB.Op == "sw" || WB.Op == "beq") {
+                cout << "RegWrite=" << WB.RegWrite << " MemToReg=X" << "\n";
+            }
+            else {
+                cout << "RegWrite=" << WB.RegWrite << " MemToReg=" << WB.MemtoReg << "\n";
+            }
         }
         if (MEM.Op != "") {
             cout << MEM.Op << " MEM ";
-            cout << "Branch=" << MEM.Branch << " MemRead=" << MEM.MemRead << " MemWrite=" << MEM.MemWrite;
-            cout << " RegWrite=" << MEM.RegWrite << " MemToReg=" << MEM.MemtoReg << "\n";
+            if (MEM.Op == "sw" || MEM.Op == "beq") {
+                cout << "Branch=" << MEM.Branch << " MemRead=" << MEM.MemRead << " MemWrite=" << MEM.MemWrite;
+                cout << " RegWrite=" << MEM.RegWrite << " MemToReg= X" << "\n";
+            }
+            else {
+                cout << "Branch=" << MEM.Branch << " MemRead=" << MEM.MemRead << " MemWrite=" << MEM.MemWrite;
+                cout << " RegWrite=" << MEM.RegWrite << " MemToReg=" << MEM.MemtoReg << "\n";
+            }
         }
         if (EX.Op != "") {
             cout << EX.Op << " EX ";
-            cout << "RegDst=" << EX.RegDst << " ALUSrc=" << EX.ALUSrc << " Branch=" << EX.Branch;
-            cout << " MemRead=" << EX.MemRead << " MemWrite=" << EX.MemWrite << " RegWrite=" << EX.RegWrite;
-            cout << " MemToReg=" << EX.MemtoReg << "\n";
+            if (EX.Op == "sw" || EX.Op == "beq") {
+                cout << "RegDst=X" << " ALUSrc=" << EX.ALUSrc << " Branch=" << EX.Branch;
+                cout << " MemRead=" << EX.MemRead << " MemWrite=" << EX.MemWrite << " RegWrite=" << EX.RegWrite;
+                cout << " MemToReg=X" << "\n";
+            } else {
+                cout << "RegDst=" << EX.RegDst << " ALUSrc=" << EX.ALUSrc << " Branch=" << EX.Branch;
+                cout << " MemRead=" << EX.MemRead << " MemWrite=" << EX.MemWrite << " RegWrite=" << EX.RegWrite;
+                cout << " MemToReg=" << EX.MemtoReg << "\n";
+
+            }
+            
         }
         if (ID.Op != "") {
             cout << ID.Op << " ID\n";
