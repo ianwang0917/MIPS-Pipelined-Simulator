@@ -9,12 +9,16 @@ stringstream ss;
 
 struct IFStruct { //  Instruction fetch from memory
     string Instruction; // Full instruction. e.g. "lw $2, 8($0)"
+    string Op;
     int PC = 0;
+    int Rs = 0; //For load use hazard, implement Rs and Rt for "lw" here.
+    int Rt = 0; //For load use hazard, implement Rs and Rt for "lw" here.
+    int Rd = 0; //For load use hazard, implement Rs and Rt for "lw" here.
     bool nop = false;
 };
 
 struct IDStruct { // Instruction decode & register read
-    string Op; // Split instruction. e.g. "lw", "sw", "add", "sub", "beq
+    string Op; // Splited instruction. e.g. "lw", "sw", "add", "sub", "beq
     int Rs = 0;
     int Rt = 0;
     int Rd = 0;
@@ -48,6 +52,7 @@ struct MEMStruct { // Access memory operand
     int Rd = 0;
     int ALUResult;
     int ReadData;
+    int WriteData;
     int Result;
     bool MemRead = false; // Used in MEM
     bool MemWrite = false; // Used in MEM
@@ -78,8 +83,13 @@ private:
     WBStruct WB;
     int registers[32] = { 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1 };
     int memory[32] = { 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1 };
-    queue<string> instructions;
+    queue<string> instructions; // Read instructions from file
     int cycle = 1;
+    bool EXHazard_Rs = false;
+    bool EXHazard_Rt = false;
+    bool MEMHazard_Rs = false;
+    bool MEMHazard_Rt = false;
+    bool LoadUseHazard = false;
 
 public:
     void excuteIF() {
@@ -87,9 +97,34 @@ public:
             IF.Instruction = instructions.front();
             instructions.pop();
         }
+
+        string reg1, reg2, reg3_or_offset;
+        ss << IF.Instruction;
+        ss >> IF.Op;
+
+        if (IF.Op == "lw" || IF.Op == "sw") {
+            ss >> reg1 >> reg2;
+            IF.Rt = stoi(reg1.substr(1));
+            IF.Rs = stoi(reg2.substr(reg2.find('$') + 1, reg2.find(')') - reg2.find('(') - 2));
+        }
+        else if (IF.Op == "add" || IF.Op == "sub") {
+            ss >> reg1 >> reg2 >> reg3_or_offset;
+            IF.Rd = stoi(reg1.substr(1));
+            IF.Rs = stoi(reg2.substr(1));
+            IF.Rt = stoi(reg3_or_offset.substr(1));
+        }
+        else if (IF.Op == "beq") {
+            ss >> reg1 >> reg2 >> reg3_or_offset;
+            IF.Rs = stoi(reg1.substr(1));
+            IF.Rt = stoi(reg2.substr(1));
+        }
+
+        ss.str("");
+        ss.clear();
     }
 
     void excuteID() {
+        ID.nop = IF.nop;
         ss << IF.Instruction;
         ss >> ID.Op; // stringstream split string by space in default.
         if (ID.Op == "lw") {
@@ -114,11 +149,7 @@ public:
         }
         else if (ID.Op == "add") {
             string rd, rs, rt;
-            ss >> rd;
-            ss.ignore();
-            ss >> rs;
-            ss.ignore();
-            ss >> rt;
+            ss >> rd >> rs >> rt;
 
             ID.Rd = stoi(rd.substr(1));
             ID.Rs = stoi(rs.substr(1));
@@ -126,11 +157,7 @@ public:
         }
         else if (ID.Op == "sub") {
             string rd, rs, rt;
-            ss >> rd;
-            ss.ignore();
-            ss >> rs;
-            ss.ignore();
-            ss >> rt;
+            ss >> rd >> rs >> rt;
 
             ID.Rd = stoi(rd.substr(1));
             ID.Rs = stoi(rs.substr(1));
@@ -138,11 +165,7 @@ public:
         }
         else if (ID.Op == "beq") {
             string rs, rt, offset;
-            ss >> rs;
-            ss.ignore();
-            ss >> rt;
-            ss.ignore();
-            ss >> offset;
+            ss >> rs >> rt >> offset;
 
             ID.Rs = stoi(rs.substr(1));
             ID.Rt = stoi(rt.substr(1));
@@ -159,14 +182,14 @@ public:
     }
 
     void excuteEX() {
+        EX.nop = ID.nop;
         EX.Op = ID.Op;
         if (EX.Op == "lw") {
             EX.Rs = ID.Rs;
             EX.Rt = ID.Rt;
             EX.Immediate = ID.Immediate;
-
             EX.RegDst = 0; EX.ALUSrc = 1, EX.MemtoReg = 1, EX.RegWrite = 1, EX.MemRead = 1, EX.MemWrite = 0, EX.Branch = 0;
-            EX.ALUResult = EX.Rs + EX.Immediate/4;
+            EX.ALUResult = EX.Rs + EX.Immediate / 4;
         }
         else if (EX.Op == "sw") {
             EX.Rs = ID.Rs;
@@ -174,7 +197,7 @@ public:
             EX.Immediate = ID.Immediate;
             // Actually,RegDst and MemtoReg are don't care.
             EX.RegDst = 0; EX.ALUSrc = 1, EX.MemtoReg = 0, EX.RegWrite = 0, EX.MemRead = 0, EX.MemWrite = 1, EX.Branch = 0;
-            EX.ALUResult = EX.Rt + EX.Immediate/4;
+            EX.ALUResult = EX.Rt + EX.Immediate / 4;
         }
         else if (EX.Op == "add" || EX.Op == "sub") {
             EX.Rd = ID.Rd;
@@ -196,11 +219,12 @@ public:
             // Branch should check in ID.
             EX.RegDst = 0; EX.ALUSrc = 1, EX.MemtoReg = 0, EX.RegWrite = 0, EX.MemRead = 0, EX.MemWrite = 1, EX.Branch = 0;
         }
- 
+
         resetID();
     }
 
     void excuteMEM() {
+        MEM.nop = EX.nop;
         MEM.Op = EX.Op;
         MEM.Rs = EX.Rs;
         MEM.Rt = EX.Rt;
@@ -217,17 +241,18 @@ public:
             // Load 指令：從記憶體讀取數據
             MEM.ReadData = memory[MEM.ALUResult];
         }
-
         else if (MEM.MemWrite) {
             // Store 指令：將資料寫入記憶體
             memory[MEM.ALUResult] = registers[MEM.Rs];
         }
-        else{}
+        else {
+        }
 
         resetEX();
     }
 
     void excuteWB() {
+        WB.nop = MEM.nop;
         WB.Op = MEM.Op;
         WB.Rs = MEM.Rs;
         WB.Rt = MEM.Rt;
@@ -237,7 +262,7 @@ public:
         WB.MemtoReg = MEM.MemtoReg;
 
         if (WB.RegWrite) {
-          
+
             if (WB.MemtoReg) {
                 // 從記憶體寫回暫存器 (lw 指令)
                 registers[WB.Rt] = MEM.ReadData;
@@ -258,40 +283,89 @@ public:
     void resetMEM() { MEM = MEMStruct(); }
     void resetWB() { WB = WBStruct(); }
 
-    void excute() {
+    void detectEXHazard() { // Should Forwarding
+        if (EX.RegWrite == true && EX.Rd != 0 && EX.Rd == ID.Rs) {
+            /* if (EX/MEM.RegWrite and (EX/MEM.RegisterRd ≠ 0)
+            and (EX/MEM.RegisterRd = ID/EX.RegisterRs)) ForwardA = 10 */
+            EXHazard_Rs = true;
+        }
+        else {
+            EXHazard_Rs = false;
+        }
+        if (EX.RegWrite == true && EX.Rd != 0 && EX.Rd == ID.Rt) {
+            /* if (EX/MEM.RegWrite and (EX/MEM.RegisterRd ≠ 0)
+            and (EX/MEM.RegisterRd = ID/EX.RegisterRt)) ForwardB = 10 */
+            EXHazard_Rt = true;
+        }
+        else {
+            EXHazard_Rt = false;
+        }
+    }
+
+    void detectMEMHazard() { // Should Forwarding
+        if (MEM.RegWrite == true && MEM.Rd != 0 && MEM.Rd == ID.Rs && !EXHazard_Rs) {
+            /* if (MEM/WB.RegWrite and (MEM/WB.RegisterRd ≠ 0)
+            and not (EX/MEM.RegWrite and (EX/MEM.RegisterRd ≠ 0)
+            and (EX/MEM.RegisterRd = ID/EX.RegisterRs))
+            and (MEM/WB.RegisterRd = ID/EX.RegisterRs)) ForwardA = 01 */
+            MEMHazard_Rs = true;
+        }
+        else {
+            MEMHazard_Rs = false;
+        }
+
+        if (MEM.RegWrite == true && MEM.Rd != 0 && MEM.Rd == ID.Rt && !EXHazard_Rt) {
+            /*if (MEM/WB.RegWrite and (MEM/WB.RegisterRd ≠ 0)
+            and not (EX/MEM.RegWrite and (EX/MEM.RegisterRd ≠ 0)
+            and (EX/MEM.RegisterRd = ID/EX.RegisterRt))
+            and (MEM/WB.RegisterRd = ID/EX.RegisterRt)) ForwardB = 01*/
+            MEMHazard_Rt = true;
+        }
+        else {
+            MEMHazard_Rt = false;
+        }
+    }
+
+    void detectLoadUseHazard() { // Should Stall (unavoidable)
+        if (ID.Op == "lw" && (ID.Rt == IF.Rs || ID.Rt == IF.Rt)) {
+            LoadUseHazard = true;
+        }
+        else {
+            LoadUseHazard = false;
+        }
+    }
+
+    void excute() { // Forward implement, backword pull data.
+        detectEXHazard();
+        detectMEMHazard();
+        detectLoadUseHazard();
         excuteWB();
         excuteMEM();
         excuteEX();
         excuteID();
         excuteIF();
-        printState();
     }
 
     void printState() {
         cout << "Clock Cycle " << cycle << ":\n";
-
         if (WB.Op != "") {
             cout << WB.Op << " WB ";
             cout << "RegWrite=" << WB.RegWrite << " MemToReg=" << WB.MemtoReg << "\n";
         }
-
         if (MEM.Op != "") {
             cout << MEM.Op << " MEM ";
             cout << "Branch=" << MEM.Branch << " MemRead=" << MEM.MemRead << " MemWrite=" << MEM.MemWrite;
             cout << " RegWrite=" << MEM.RegWrite << " MemToReg=" << MEM.MemtoReg << "\n";
         }
-
         if (EX.Op != "") {
             cout << EX.Op << " EX ";
             cout << "RegDst=" << EX.RegDst << " ALUSrc=" << EX.ALUSrc << " Branch=" << EX.Branch;
             cout << " MemRead=" << EX.MemRead << " MemWrite=" << EX.MemWrite << " RegWrite=" << EX.RegWrite;
             cout << " MemToReg=" << EX.MemtoReg << "\n";
         }
-
         if (ID.Op != "") {
             cout << ID.Op << " ID\n";
         }
-
         if (IF.Instruction != "") {
             string IFInstruction;
             ss << IF.Instruction;
@@ -300,27 +374,10 @@ public:
             ss.str("");
             ss.clear();
         }
-
     }
 
     void printFinal() {
-        cout << "\n##Final Result:\nTotal Cycles: " << cycle << "\n";
-
-        cout << "Final Register Values:\n";
-        for (int i = 0; i < 32; i++) {
-            cout << registers[i] << " ";
-        }
-        cout << "\n";
-
-        cout << "Final Memory Values:\n";
-        for (int i = 0; i < 32; i++) {
-            cout << memory[i] << " ";
-        }
-        cout << "\n";
-    }
-
-    void printFinal() {
-        cout << "\n##Final Result:\nTotal Cycles: " << cycle << "\n";
+        cout << "\n##Final Result:\nTotal Cycles: " << cycle - 1 << "\n";
 
         cout << "Final Register Values:\n";
         for (int i = 0; i < 32; i++) {
@@ -355,6 +412,7 @@ public:
             if (IF.Instruction == "" && ID.Op == "" && EX.Op == "" && MEM.Op == "" && WB.Op == "") {
                 break;
             }
+            printState();
             cycle++;
         }
         printFinal();
