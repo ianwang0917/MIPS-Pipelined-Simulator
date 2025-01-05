@@ -45,8 +45,10 @@ struct MEMStruct { // Access memory operand
     string Op;
     int Rs = 0;
     int Rt = 0;
+    int Rd = 0;
     int ALUResult;
-    int temp;
+    int ReadData;
+    int Result;
     bool MemRead = false; // Used in MEM
     bool MemWrite = false; // Used in MEM
     bool RegDst = false;
@@ -60,6 +62,7 @@ struct WBStruct { // Write result back to register
     string Op;
     int Rs = 0;
     int Rt = 0;
+    int Rd = 0;
     bool RegDst = false; // Used in WB
     bool RegWrite = false; // Used in WB
     bool MemtoReg = false; // Used in WB
@@ -161,9 +164,9 @@ public:
             EX.Rs = ID.Rs;
             EX.Rt = ID.Rt;
             EX.Immediate = ID.Immediate;
-            EX.RegDst = 0; EX.ALUSrc = 1, EX.MemtoReg = 1, EX.RegWrite = 1, EX.MemRead = 1, EX.MemWrite = 0, EX.Branch = 0;
 
-            EX.ALUResult = EX.Rs + EX.Immediate / 4;
+            EX.RegDst = 0; EX.ALUSrc = 1, EX.MemtoReg = 1, EX.RegWrite = 1, EX.MemRead = 1, EX.MemWrite = 0, EX.Branch = 0;
+            EX.ALUResult = EX.Rs + EX.Immediate/4;
         }
         else if (EX.Op == "sw") {
             EX.Rs = ID.Rs;
@@ -171,8 +174,7 @@ public:
             EX.Immediate = ID.Immediate;
             // Actually,RegDst and MemtoReg are don't care.
             EX.RegDst = 0; EX.ALUSrc = 1, EX.MemtoReg = 0, EX.RegWrite = 0, EX.MemRead = 0, EX.MemWrite = 1, EX.Branch = 0;
-
-            EX.ALUResult = EX.Rt + EX.Immediate / 4;
+            EX.ALUResult = EX.Rt + EX.Immediate/4;
         }
         else if (EX.Op == "add" || EX.Op == "sub") {
             EX.Rd = ID.Rd;
@@ -180,10 +182,10 @@ public:
             EX.Rt = ID.Rt;
             EX.RegDst = 1; EX.ALUSrc = 0, EX.MemtoReg = 0, EX.RegWrite = 1, EX.MemRead = 0, EX.MemWrite = 0, EX.Branch = 0;
             if (EX.Op == "add") {
-                registers[EX.Rd] = registers[EX.Rs] + registers[EX.Rt];
+                EX.ALUResult = registers[EX.Rs] + registers[EX.Rt];
             }
             else if (EX.Op == "sub") {
-                registers[EX.Rd] = registers[EX.Rs] - registers[EX.Rt];
+                EX.ALUResult = registers[EX.Rs] - registers[EX.Rt];
             }
         }
         else if (EX.Op == "beq") {
@@ -194,33 +196,34 @@ public:
             // Branch should check in ID.
             EX.RegDst = 0; EX.ALUSrc = 1, EX.MemtoReg = 0, EX.RegWrite = 0, EX.MemRead = 0, EX.MemWrite = 1, EX.Branch = 0;
         }
+ 
         resetID();
     }
 
     void excuteMEM() {
-        if (EX.nop == true) {               //if stall exists
-            MEM.nop = true;
-        }
-
         MEM.Op = EX.Op;
         MEM.Rs = EX.Rs;
         MEM.Rt = EX.Rt;
+        MEM.Rd = EX.Rd;
         MEM.ALUResult = EX.ALUResult;
         MEM.RegDst = EX.RegDst;
         MEM.MemtoReg = EX.MemtoReg;
         MEM.RegWrite = EX.RegWrite;
         MEM.MemRead = EX.MemRead;
         MEM.MemWrite = EX.MemWrite;
+        MEM.Branch = EX.Branch;
 
-        if (MEM.Op == "lw") {
-            MEM.temp = memory[MEM.ALUResult];
+        if (MEM.MemRead) {
+            // Load 指令：從記憶體讀取數據
+            MEM.ReadData = memory[MEM.ALUResult];
         }
-        else if (MEM.Op == "sw") {
+
+        else if (MEM.MemWrite) {
+            // Store 指令：將資料寫入記憶體
             memory[MEM.ALUResult] = registers[MEM.Rs];
         }
-        else if (MEM.Op == "beq") {
+        else{}
 
-        }
         resetEX();
     }
 
@@ -228,13 +231,24 @@ public:
         WB.Op = MEM.Op;
         WB.Rs = MEM.Rs;
         WB.Rt = MEM.Rt;
+        WB.Rd = MEM.Rd;
         WB.RegDst = MEM.RegDst;
         WB.RegWrite = MEM.RegWrite;
         WB.MemtoReg = MEM.MemtoReg;
 
-        if (WB.Op == "lw") {
-            registers[WB.Rt] = MEM.temp;
+        if (WB.RegWrite) {
+          
+            if (WB.MemtoReg) {
+                // 從記憶體寫回暫存器 (lw 指令)
+                registers[WB.Rt] = MEM.ReadData;
+            }
+            else {
+                // 從 ALU 結果寫回暫存器 (R-type 指令如 add/sub)
+                registers[WB.Rd] = MEM.ALUResult;
+            }
         }
+
+
         resetMEM();
     }
 
@@ -255,6 +269,29 @@ public:
 
     void printState() {
         cout << "Clock Cycle " << cycle << ":\n";
+
+        if (WB.Op != "") {
+            cout << WB.Op << " WB ";
+            cout << "RegWrite=" << WB.RegWrite << " MemToReg=" << WB.MemtoReg << "\n";
+        }
+
+        if (MEM.Op != "") {
+            cout << MEM.Op << " MEM ";
+            cout << "Branch=" << MEM.Branch << " MemRead=" << MEM.MemRead << " MemWrite=" << MEM.MemWrite;
+            cout << " RegWrite=" << MEM.RegWrite << " MemToReg=" << MEM.MemtoReg << "\n";
+        }
+
+        if (EX.Op != "") {
+            cout << EX.Op << " EX ";
+            cout << "RegDst=" << EX.RegDst << " ALUSrc=" << EX.ALUSrc << " Branch=" << EX.Branch;
+            cout << " MemRead=" << EX.MemRead << " MemWrite=" << EX.MemWrite << " RegWrite=" << EX.RegWrite;
+            cout << " MemToReg=" << EX.MemtoReg << "\n";
+        }
+
+        if (ID.Op != "") {
+            cout << ID.Op << " ID\n";
+        }
+
         if (IF.Instruction != "") {
             string IFInstruction;
             ss << IF.Instruction;
@@ -263,24 +300,23 @@ public:
             ss.str("");
             ss.clear();
         }
-        if (ID.Op != "") {
-            cout << ID.Op << " ID\n";
+
+    }
+
+    void printFinal() {
+        cout << "\n##Final Result:\nTotal Cycles: " << cycle << "\n";
+
+        cout << "Final Register Values:\n";
+        for (int i = 0; i < 32; i++) {
+            cout << registers[i] << " ";
         }
-        if (EX.Op != "") {
-            cout << EX.Op << " EX ";
-            cout << "RegDst=" << EX.RegDst << " ALUSrc=" << EX.ALUSrc << " Branch=" << EX.Branch;
-            cout << " MemRead=" << EX.MemRead << " MemWrite=" << EX.MemWrite << " RegWrite=" << EX.RegWrite;
-            cout << " MemToReg=" << EX.MemtoReg << "\n";
+        cout << "\n";
+
+        cout << "Final Memory Values:\n";
+        for (int i = 0; i < 32; i++) {
+            cout << memory[i] << " ";
         }
-        if (MEM.Op != "") {
-            cout << MEM.Op << " MEM ";
-            cout << "Branch=" << MEM.Branch << " MemRead=" << MEM.MemRead << " MemWrite=" << MEM.MemWrite;
-            cout << " RegWrite=" << MEM.RegWrite << " MemToReg=" << MEM.MemtoReg << "\n";
-        }
-        if (WB.Op != "") {
-            cout << WB.Op << " WB ";
-            cout << "RegWrite=" << WB.RegWrite << " MemToReg=" << WB.MemtoReg << "\n";
-        }
+        cout << "\n";
     }
 
     void printFinal() {
@@ -301,7 +337,7 @@ public:
 
     void readInstructions() {
         fstream file;
-        file.open("inputs/test3.txt");
+        file.open("inputs/test1.txt");
         if (!file) {
             throw "Can't open file";
         }
