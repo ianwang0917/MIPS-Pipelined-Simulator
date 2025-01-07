@@ -6,7 +6,7 @@
 using namespace std;
 
 stringstream ss;
-
+int stallCount = 0;
 struct IFStruct { //  Instruction fetch from memory
     string Instruction; // Full instruction. e.g. "lw $2, 8($0)"
     string Op;
@@ -22,6 +22,7 @@ struct IDStruct { // Instruction decode & register read
     int Rs = 0;
     int Rt = 0;
     int Rd = 0;
+    int ReadData1;
     int Immediate = 0;
     bool nop = false;
 };
@@ -97,6 +98,9 @@ public:
             IF.Instruction = instructions.front();
             instructions.pop();
         }
+        else {
+            IF.Instruction = "";// 無指令時清空
+        }
 
         string reg1, reg2, reg3_or_offset;
         ss << IF.Instruction;
@@ -124,6 +128,11 @@ public:
     }
 
     void excuteID() {
+        if (LoadUseHazard) {
+            ID.nop = true;
+            return; // 插入 nop 停止
+        }
+
         ID.nop = IF.nop;
         ss << IF.Instruction;
         ss >> ID.Op; // stringstream split string by space in default.
@@ -184,46 +193,71 @@ public:
     void excuteEX() {
         EX.nop = ID.nop;
         EX.Op = ID.Op;
+
+
+        // 在 EX 階段處理 forwarding
+        int forwardRsValue = registers[ID.Rs];
+        int forwardRtValue = registers[ID.Rt];
+
+        if (EXHazard_Rs) forwardRsValue = EX.ALUResult;
+        else if (MEMHazard_Rs) forwardRsValue = MEM.ALUResult;
+
+        if (EXHazard_Rt) forwardRtValue = EX.ALUResult;
+        else if (MEMHazard_Rt) forwardRtValue = MEM.ALUResult;
+
+
+        if (EX.RegWrite && EX.Rd != 0 && EX.Rd == ID.Rs) {
+            ID.ReadData1 = EX.ALUResult; // Forward EX 結果給 ID
+        }
+        if (MEM.RegWrite && MEM.Rd != 0 && MEM.Rd == ID.Rs) {
+            ID.ReadData1 = MEM.ReadData; // Forward MEM 結果給 ID
+        }
+
+        if (EX.Op == "beq") {
+            if (forwardRsValue == forwardRtValue) {
+                IF.PC += EX.Immediate; // 更新 PC。
+                resetIF();
+                resetID();
+            }
+        }
+
+
+
         if (EX.Op == "lw") {
             EX.Rs = ID.Rs;
             EX.Rt = ID.Rt;
             EX.Immediate = ID.Immediate;
-            EX.RegDst = 0; EX.ALUSrc = 1, EX.MemtoReg = 1, EX.RegWrite = 1, EX.MemRead = 1, EX.MemWrite = 0, EX.Branch = 0;
-            EX.ALUResult = EX.Rs + EX.Immediate / 4;
+            EX.RegDst = 0; EX.ALUSrc = 1; EX.MemtoReg = 1; EX.RegWrite = 1; EX.MemRead = 1; EX.MemWrite = 0; EX.Branch = 0;
+            EX.ALUResult = forwardRsValue + EX.Immediate / 4;
         }
         else if (EX.Op == "sw") {
             EX.Rs = ID.Rs;
             EX.Rt = ID.Rt;
             EX.Immediate = ID.Immediate;
-            // Actually,RegDst and MemtoReg are don't care.
-            EX.RegDst = 0; EX.ALUSrc = 1, EX.MemtoReg = 0, EX.RegWrite = 0, EX.MemRead = 0, EX.MemWrite = 1, EX.Branch = 0;
-            EX.ALUResult = EX.Rt + EX.Immediate / 4;
+            EX.RegDst = 0; EX.ALUSrc = 1; EX.MemtoReg = 0; EX.RegWrite = 0; EX.MemRead = 0; EX.MemWrite = 1; EX.Branch = 0;
+            EX.ALUResult = forwardRsValue + EX.Immediate / 4;
         }
         else if (EX.Op == "add" || EX.Op == "sub") {
             EX.Rd = ID.Rd;
             EX.Rs = ID.Rs;
             EX.Rt = ID.Rt;
-            EX.RegDst = 1; EX.ALUSrc = 0, EX.MemtoReg = 0, EX.RegWrite = 1, EX.MemRead = 0, EX.MemWrite = 0, EX.Branch = 0;
+            EX.RegDst = 1; EX.ALUSrc = 0; EX.MemtoReg = 0; EX.RegWrite = 1; EX.MemRead = 0; EX.MemWrite = 0; EX.Branch = 0;
+
             if (EX.Op == "add") {
-                EX.ALUResult = registers[EX.Rs] + registers[EX.Rt];
+                EX.ALUResult = forwardRsValue + forwardRtValue;
             }
             else if (EX.Op == "sub") {
-                EX.ALUResult = registers[EX.Rs] - registers[EX.Rt];
+                EX.ALUResult = forwardRsValue - forwardRtValue;
             }
         }
-        else if (EX.Op == "beq") {
-            EX.Rd = ID.Rd;
-            EX.Rs = ID.Rs;
-            EX.Immediate = ID.Immediate;
-            // Actually,RegDst and MemtoReg are don't care.
-            // Branch should check in ID.
-            EX.RegDst = 0; EX.ALUSrc = 1, EX.MemtoReg = 0, EX.RegWrite = 0, EX.MemRead = 0, EX.MemWrite = 1, EX.Branch = 0;
-        }
+       
 
         resetID();
     }
 
+
     void excuteMEM() {
+        
         MEM.nop = EX.nop;
         MEM.Op = EX.Op;
         MEM.Rs = EX.Rs;
@@ -247,7 +281,7 @@ public:
         }
         else {
         }
-
+        
         resetEX();
     }
 
@@ -327,23 +361,37 @@ public:
     }
 
     void detectLoadUseHazard() { // Should Stall (unavoidable)
-        if (ID.Op == "lw" && (ID.Rt == IF.Rs || ID.Rt == IF.Rt)) {
+        if (EX.Op == "lw" && (EX.Rt == ID.Rs || EX.Rt == ID.Rt || ID.Op == "beq" || ID.Op == "sw")) {
+            LoadUseHazard = true;
+            
+        }
+        else if ((EX.Op == "add" || EX.Op == "sub") && (EX.Rt == ID.Rs || EX.Rt == ID.Rt || ID.Op == "sw")) {
+            LoadUseHazard = false;
+        }
+       else if (MEM.Op == "lw" && (MEM.Rd == ID.Rs || MEM.Rd == ID.Rt || ID.Op == "beq")) {
+            LoadUseHazard = true;
+        }
+       else if ((EX.Op == "add" || EX.Op == "sub") && (EX.Rt == ID.Rs || EX.Rt == ID.Rt || ID.Op == "beq")) {
             LoadUseHazard = true;
         }
         else {
             LoadUseHazard = false;
         }
+    
     }
 
+
     void excute() { // Forward implement, backword pull data.
+        detectLoadUseHazard();
         detectEXHazard();
         detectMEMHazard();
-        detectLoadUseHazard();
         excuteWB();
         excuteMEM();
-        excuteEX();
-        excuteID();
-        excuteIF();
+        if (!LoadUseHazard) { // 如果沒有 Load-Use Hazard 才執行解碼和取指
+            excuteEX();
+            excuteID();
+            excuteIF();
+        }
     }
 
     void printState() {
@@ -359,8 +407,12 @@ public:
         }
         if (MEM.Op != "") {
             cout << MEM.Op << " MEM ";
-            if (MEM.Op == "sw" || MEM.Op == "beq") {
+            if (MEM.Op == "sw" ) {
                 cout << "Branch=" << MEM.Branch << " MemRead=" << MEM.MemRead << " MemWrite=" << MEM.MemWrite;
+                cout << " RegWrite=" << MEM.RegWrite << " MemToReg= X" << "\n";
+            }
+            else if (MEM.Op == "beq") {
+                cout << "Branch=1" << " MemRead=" << MEM.MemRead << " MemWrite=" << MEM.MemWrite;
                 cout << " RegWrite=" << MEM.RegWrite << " MemToReg= X" << "\n";
             }
             else {
@@ -370,23 +422,25 @@ public:
         }
         if (EX.Op != "") {
             cout << EX.Op << " EX ";
-            if(EX.Op == "sw" || EX.Op == "beq") {
+            if (EX.Op == "sw" || EX.Op == "beq") {
                 cout << "RegDst=X" << " ALUSrc=" << EX.ALUSrc << " Branch=" << EX.Branch;
                 cout << " MemRead=" << EX.MemRead << " MemWrite=" << EX.MemWrite << " RegWrite=" << EX.RegWrite;
-                cout << " MemToReg=X" <<  "\n"  ;
+                cout << " MemToReg=X" << "\n";
             }
             else {
                 cout << "RegDst=" << EX.RegDst << " ALUSrc=" << EX.ALUSrc << " Branch=" << EX.Branch;
                 cout << " MemRead=" << EX.MemRead << " MemWrite=" << EX.MemWrite << " RegWrite=" << EX.RegWrite;
-                cout << " MemToReg=" << EX.MemtoReg <<  "\n"  ;
+                cout << " MemToReg=" << EX.MemtoReg << "\n";
 
             }
-            
+
         }
         if (ID.Op != "") {
-            cout << ID.Op << " ID\n";
+            
+            cout << ID.Op << " ID\n"; 
+           
         }
-        if (IF.Instruction != "") {
+        if (IF.Instruction != "" && !IF.nop) {
             string IFInstruction;
             ss << IF.Instruction;
             ss >> IFInstruction;
