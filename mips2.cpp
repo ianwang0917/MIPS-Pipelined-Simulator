@@ -468,7 +468,7 @@ public:
 
     void readInstructions() {
         fstream file;
-        file.open("inputs/test8.txt");
+        file.open("inputs/test3.txt");
         if (!file) {
             throw "Can't open file";
         }

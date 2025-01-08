@@ -58,5 +58,5 @@ g++ -o mips2 mips2.cpp
 * 若需要將輸出保存至檔案，請重定向輸出：
 
    ```bash
-   ./mips2 > output.txt
+   ./mips2 > outputs/test3.txt
    ```
