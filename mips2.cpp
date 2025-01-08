@@ -194,7 +194,6 @@ public:
         EX.nop = ID.nop;
         EX.Op = ID.Op;
 
-
         // 在 EX 階段處理 forwarding
         int forwardRsValue = registers[ID.Rs];
         int forwardRtValue = registers[ID.Rt];
@@ -361,17 +360,13 @@ public:
     }
 
     void detectLoadUseHazard() { // Should Stall (unavoidable)
-        if (EX.Op == "lw" && (EX.Rt == ID.Rs || EX.Rt == ID.Rt || ID.Op == "beq" || ID.Op == "sw")) {
-            LoadUseHazard = true;
-            
-        }
-        else if ((EX.Op == "add" || EX.Op == "sub") && (EX.Rt == ID.Rs || EX.Rt == ID.Rt || ID.Op == "sw")) {
-            LoadUseHazard = false;
-        }
-       else if (MEM.Op == "lw" && (MEM.Rd == ID.Rs || MEM.Rd == ID.Rt || ID.Op == "beq")) {
+        if (EX.Op == "lw" && (EX.Rt == ID.Rs || EX.Rt == ID.Rt)) {
             LoadUseHazard = true;
         }
-       else if ((EX.Op == "add" || EX.Op == "sub") && (EX.Rt == ID.Rs || EX.Rt == ID.Rt || ID.Op == "beq")) {
+       else if ((MEM.Op == "lw" && ID.Op == "beq") && (MEM.Rd == EX.Rs || MEM.Rd == EX.Rt )) {
+            LoadUseHazard = true;
+        }
+       else if ((EX.Op == "add" || EX.Op == "sub") && ID.Op == "beq" && (EX.Rd == ID.Rs || EX.Rd == ID.Rt)) {
             LoadUseHazard = true;
         }
         else {
@@ -387,7 +382,7 @@ public:
         detectMEMHazard();
         excuteWB();
         excuteMEM();
-        if (!LoadUseHazard) { // 如果沒有 Load-Use Hazard 才執行解碼和取指
+        if (!LoadUseHazard) { // 如果沒有 Load-Use Hazard 才執行
             excuteEX();
             excuteID();
             excuteIF();
@@ -422,8 +417,13 @@ public:
         }
         if (EX.Op != "") {
             cout << EX.Op << " EX ";
-            if (EX.Op == "sw" || EX.Op == "beq") {
+            if (EX.Op == "sw") {
                 cout << "RegDst=X" << " ALUSrc=" << EX.ALUSrc << " Branch=" << EX.Branch;
+                cout << " MemRead=" << EX.MemRead << " MemWrite=" << EX.MemWrite << " RegWrite=" << EX.RegWrite;
+                cout << " MemToReg=X" << "\n";
+            }
+            else if ( EX.Op == "beq") {
+                cout << "RegDst=X" << " ALUSrc=" << EX.ALUSrc << " Branch=1";
                 cout << " MemRead=" << EX.MemRead << " MemWrite=" << EX.MemWrite << " RegWrite=" << EX.RegWrite;
                 cout << " MemToReg=X" << "\n";
             }
@@ -468,7 +468,7 @@ public:
 
     void readInstructions() {
         fstream file;
-        file.open("inputs/test1.txt");
+        file.open("inputs/test8.txt");
         if (!file) {
             throw "Can't open file";
         }
