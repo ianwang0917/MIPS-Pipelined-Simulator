@@ -6,7 +6,7 @@
 using namespace std;
 
 stringstream ss;
-
+int stallCount = 0;
 struct IFStruct { //  Instruction fetch from memory
     string Instruction; // Full instruction. e.g. "lw $2, 8($0)"
     string Op;
@@ -145,7 +145,8 @@ public:
             ID.Rt = stoi(regPart.substr(1));
             ID.Rs = stoi(memoryPart.substr(memoryPart.find('$') + 1, memoryPart.find(')') - memoryPart.find('(') - 2));
             ID.Immediate = stoi(memoryPart.substr(0, memoryPart.find('(')));
-        }else if (ID.Op == "sw") {
+        }
+        else if (ID.Op == "sw") {
             string regPart, memoryPart;
             ss >> regPart;
             ss.ignore();
@@ -154,29 +155,34 @@ public:
             ID.Rt = stoi(memoryPart.substr(memoryPart.find('$') + 1, memoryPart.find(')') - memoryPart.find('(') - 2));
             ID.Rs = stoi(regPart.substr(1));
             ID.Immediate = stoi(memoryPart.substr(0, memoryPart.find('(')));
-        }else if (ID.Op == "add") {
+        }
+        else if (ID.Op == "add") {
             string rd, rs, rt;
             ss >> rd >> rs >> rt;
 
             ID.Rd = stoi(rd.substr(1));
             ID.Rs = stoi(rs.substr(1));
             ID.Rt = stoi(rt.substr(1));
-        }else if (ID.Op == "sub") {
+        }
+        else if (ID.Op == "sub") {
             string rd, rs, rt;
             ss >> rd >> rs >> rt;
 
             ID.Rd = stoi(rd.substr(1));
             ID.Rs = stoi(rs.substr(1));
             ID.Rt = stoi(rt.substr(1));
-        }else if (ID.Op == "beq") {
+        }
+        else if (ID.Op == "beq") {
             string rs, rt, offset;
             ss >> rs >> rt >> offset;
 
             ID.Rs = stoi(rs.substr(1));
             ID.Rt = stoi(rt.substr(1));
             ID.Immediate = stoi(offset);
-        }else if (ID.Op == "") {
-        }else {
+        }
+        else if (ID.Op == "") {
+        }
+        else {
             throw "Unknown instruction!";
         }
         ss.str("");
@@ -188,7 +194,6 @@ public:
         EX.nop = ID.nop;
         EX.Op = ID.Op;
 
-       
         // 在 EX 階段處理 forwarding
         int forwardRsValue = registers[ID.Rs];
         int forwardRtValue = registers[ID.Rt];
@@ -244,11 +249,14 @@ public:
                 EX.ALUResult = forwardRsValue - forwardRtValue;
             }
         }
+       
+
         resetID();
     }
 
 
     void excuteMEM() {
+        
         MEM.nop = EX.nop;
         MEM.Op = EX.Op;
         MEM.Rs = EX.Rs;
@@ -265,12 +273,14 @@ public:
         if (MEM.MemRead) {
             // Load 指令：從記憶體讀取數據
             MEM.ReadData = memory[MEM.ALUResult];
-        }else if (MEM.MemWrite) {
+        }
+        else if (MEM.MemWrite) {
             // Store 指令：將資料寫入記憶體
             memory[MEM.ALUResult] = registers[MEM.Rs];
-        }else {
         }
-
+        else {
+        }
+        
         resetEX();
     }
 
@@ -289,7 +299,8 @@ public:
             if (WB.MemtoReg) {
                 // 從記憶體寫回暫存器 (lw 指令)
                 registers[WB.Rt] = MEM.ReadData;
-            }else {
+            }
+            else {
                 // 從 ALU 結果寫回暫存器 (R-type 指令如 add/sub)
                 registers[WB.Rd] = MEM.ALUResult;
             }
@@ -310,14 +321,16 @@ public:
             /* if (EX/MEM.RegWrite and (EX/MEM.RegisterRd ≠ 0)
             and (EX/MEM.RegisterRd = ID/EX.RegisterRs)) ForwardA = 10 */
             EXHazard_Rs = true;
-        }else {
+        }
+        else {
             EXHazard_Rs = false;
         }
         if (EX.RegWrite == true && EX.Rd != 0 && EX.Rd == ID.Rt) {
             /* if (EX/MEM.RegWrite and (EX/MEM.RegisterRd ≠ 0)
             and (EX/MEM.RegisterRd = ID/EX.RegisterRt)) ForwardB = 10 */
             EXHazard_Rt = true;
-        }else {
+        }
+        else {
             EXHazard_Rt = false;
         }
     }
@@ -329,7 +342,8 @@ public:
             and (EX/MEM.RegisterRd = ID/EX.RegisterRs))
             and (MEM/WB.RegisterRd = ID/EX.RegisterRs)) ForwardA = 01 */
             MEMHazard_Rs = true;
-        }else {
+        }
+        else {
             MEMHazard_Rs = false;
         }
 
@@ -339,17 +353,26 @@ public:
             and (EX/MEM.RegisterRd = ID/EX.RegisterRt))
             and (MEM/WB.RegisterRd = ID/EX.RegisterRt)) ForwardB = 01*/
             MEMHazard_Rt = true;
-        }else {
+        }
+        else {
             MEMHazard_Rt = false;
         }
     }
 
     void detectLoadUseHazard() { // Should Stall (unavoidable)
-        if (EX.Op == "lw" && (EX.Rt == ID.Rs || EX.Rt == ID.Rt || ID.Op == "beq" || ID.Op == "sw")) {
+        if (EX.Op == "lw" && (EX.Rt == ID.Rs || EX.Rt == ID.Rt)) {
             LoadUseHazard = true;
-        }else {
+        }
+       else if ((MEM.Op == "lw" && ID.Op == "beq") && (MEM.Rd == EX.Rs || MEM.Rd == EX.Rt )) {
+            LoadUseHazard = true;
+        }
+       else if ((EX.Op == "add" || EX.Op == "sub") && ID.Op == "beq" && (EX.Rd == ID.Rs || EX.Rd == ID.Rt)) {
+            LoadUseHazard = true;
+        }
+        else {
             LoadUseHazard = false;
         }
+    
     }
 
 
@@ -359,12 +382,11 @@ public:
         detectMEMHazard();
         excuteWB();
         excuteMEM();
-        excuteEX();
-        if (!LoadUseHazard) { // 如果沒有 Load-Use Hazard 才執行解碼和取指
+        if (!LoadUseHazard) { // 如果沒有 Load-Use Hazard 才執行
+            excuteEX();
             excuteID();
             excuteIF();
         }
-        
     }
 
     void printState() {
@@ -380,8 +402,12 @@ public:
         }
         if (MEM.Op != "") {
             cout << MEM.Op << " MEM ";
-            if (MEM.Op == "sw" || MEM.Op == "beq") {
+            if (MEM.Op == "sw" ) {
                 cout << "Branch=" << MEM.Branch << " MemRead=" << MEM.MemRead << " MemWrite=" << MEM.MemWrite;
+                cout << " RegWrite=" << MEM.RegWrite << " MemToReg= X" << "\n";
+            }
+            else if (MEM.Op == "beq") {
+                cout << "Branch=1" << " MemRead=" << MEM.MemRead << " MemWrite=" << MEM.MemWrite;
                 cout << " RegWrite=" << MEM.RegWrite << " MemToReg= X" << "\n";
             }
             else {
@@ -391,20 +417,28 @@ public:
         }
         if (EX.Op != "") {
             cout << EX.Op << " EX ";
-            if (EX.Op == "sw" || EX.Op == "beq") {
+            if (EX.Op == "sw") {
                 cout << "RegDst=X" << " ALUSrc=" << EX.ALUSrc << " Branch=" << EX.Branch;
                 cout << " MemRead=" << EX.MemRead << " MemWrite=" << EX.MemWrite << " RegWrite=" << EX.RegWrite;
                 cout << " MemToReg=X" << "\n";
-            } else {
+            }
+            else if ( EX.Op == "beq") {
+                cout << "RegDst=X" << " ALUSrc=" << EX.ALUSrc << " Branch=1";
+                cout << " MemRead=" << EX.MemRead << " MemWrite=" << EX.MemWrite << " RegWrite=" << EX.RegWrite;
+                cout << " MemToReg=X" << "\n";
+            }
+            else {
                 cout << "RegDst=" << EX.RegDst << " ALUSrc=" << EX.ALUSrc << " Branch=" << EX.Branch;
                 cout << " MemRead=" << EX.MemRead << " MemWrite=" << EX.MemWrite << " RegWrite=" << EX.RegWrite;
                 cout << " MemToReg=" << EX.MemtoReg << "\n";
 
             }
-            
+
         }
         if (ID.Op != "") {
-            cout << ID.Op << " ID\n";
+            
+            cout << ID.Op << " ID\n"; 
+           
         }
         if (IF.Instruction != "" && !IF.nop) {
             string IFInstruction;
@@ -417,7 +451,7 @@ public:
     }
 
     void printFinal() {
-        cout << "\n##Final Result:\nTotal Cycles: " << cycle  - 1 << "\n";
+        cout << "\n##Final Result:\nTotal Cycles: " << cycle - 1 << "\n";
 
         cout << "Final Register Values:\n";
         for (int i = 0; i < 32; i++) {
@@ -434,7 +468,7 @@ public:
 
     void readInstructions() {
         fstream file;
-        file.open("inputs/test6.txt");
+        file.open("inputs/test8.txt");
         if (!file) {
             throw "Can't open file";
         }
