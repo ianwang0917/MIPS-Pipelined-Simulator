@@ -55,8 +55,8 @@ g++ -o mips2 mips2.cpp
 
 * 與PPT相同
 
-* 若需要將輸出保存至檔案，請重定向輸出：
+* 若需要將輸出保存至檔案，請重新定向輸出(請記得將終端開起至src資料夾)：
 
    ```bash
-   ./mips2 > outputs/test3.txt
+   ./mips2 > ../outputs/test3.txt
    ```
